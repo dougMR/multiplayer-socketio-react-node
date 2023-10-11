@@ -20,63 +20,180 @@ const io = new Server(server, {
     // if we don't hear from client in 5 secs, time out
     pingTimeout: 5000,
     cors: {
-        origin: "http://localhost:3000",
+        // origin: "http://localhost:3000",
+        // origin: "https://socket-shooter.netlify.app"
         methods: ["GET", "POST"],
     },
 });
 
-import { addUser, removeUser, getUser, getUsersInRoom } from "./users.js";
+// import { addUser, removeUser, getUser, getUsersInRoom } from "./users.js";
 import { getCos, getSin } from "./sinCos.js";
+import {
+    players,
+    removePlayer,
+    addPlayer,
+    damagePlayer,
+    postionPlayersAtStart,
+    // clearPlayers,
+} from "./players.js";
+
+//
+//     ^ IMPORTS AND SETUP ^
+//
+//////////////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////////////
+//
+//     v INIT VARIABLES v
+//
+
+let gameOver = false;
 
 let broadcastInterval;
 let broadcastIntervalRunning = false;
 
-const startBroadcastInterval = () => {
-    if (!broadcastIntervalRunning) {
-        broadcastIntervalRunning = true;
-        broadcastInterval = setInterval(broadcastLoop, 30);
+const bullets = [];
+const readyPlayers = [];
+
+const obstacles = [
+    { t: 29, r: 55, b: 32, l: 25 },
+    { t: 68, r: 75, b: 71, l: 45 },
+];
+
+const playerWidth = 1;
+
+/////////////////////////
+//    v GAME v
+////////////////////////
+
+const checkGameOver = () => {
+    if (Object.keys(players).length === 1) {
+        console.log("GAME OVER");
+        // Game Over
+        gameOver = true;
+        stopBulletsInterval();
+        bullets.length = 0;
+        readyPlayers.length = 0;
+        // clearPlayers();
+        io.emit("endGame", Object.keys(players)[0]);
+        // console.log('players: ');
+        // for(const key in players){
+        //     console.log(key);
+        // }
     }
 };
-const stopBroadcastLoop = () => {
+
+const startGame = () => {
+    console.log("START GAME");
+    // Unmark players ready
+    readyPlayers.length = 0;
+    // Put connected players in game
+    console.log("players: ");
+    for (const key in players) {
+        console.log(key);
+    }
+    // Start Music
+    io.emit("startGame");
+    // Start Game
+    gameOver = false;
+    io.emit("updatePlayers", players);
+};
+
+const checkAllPlayersReady = () => {
+    console.log("checkAllPlayersReady()");
+    console.log("players: ");
+    for (const key in players) {
+        console.log(key);
+    }
+    if (readyPlayers.length <= 1) return false;
+    for (const key in players) {
+        if (readyPlayers.indexOf(key) === -1) {
+            return false;
+        }
+    }
+    return true;
+};
+
+//////////////////////////////
+//    BULLETS LOOP
+//////////////////////////////
+
+const startBulletsInterval = () => {
+    if (!broadcastIntervalRunning) {
+        broadcastIntervalRunning = true;
+        broadcastInterval = setInterval(bulletsLoop, 30);
+    }
+};
+const stopBulletsInterval = () => {
     broadcastIntervalRunning = false;
     clearInterval(broadcastInterval);
 };
 
 // Main Game Loop / Broadcast Interval function
-const broadcastLoop = () => {
+// Move bullets and players while there are at least 1 of each
+const bulletsLoop = () => {
     if (Object.keys(players).length === 0 || bullets.length === 0) {
         // Exit Game Loop
-        stopBroadcastLoop();
+        stopBulletsInterval();
     } else {
         if (bullets.length > 0) {
+            let hits = 0;
             // move bullets
             for (let bullet of bullets) {
                 bullet.x += getCos(bullet.degrees) * bullet.speed;
                 bullet.y += getSin(bullet.degrees) * bullet.speed;
                 bullet.movesTaken++;
             }
-            checkBulletsHitPlayers();
+            checkBulletsHitObstacles();
+            if (checkBulletsHitPlayers()) {
+                hits++;
+            }
             const keepBullets = bullets.filter((b) => b.movesTaken < 20);
             bullets.length = 0;
             bullets.push(...keepBullets);
 
             io.emit("updateBullets", bullets);
+            if (hits > 0) {
+                io.emit("playHit");
+                io.emit("updatePlayers", players);
+            }
         }
-        io.emit("updatePlayers", players);
     }
+};
+
+/////////////////////////
+//    v BULLETS v
+////////////////////////
+
+const addBullet = (playerId) => {
+    if (!players[playerId]) return;
+    const position = players[playerId].position;
+    const bullet = {
+        x: position.x + getCos(position.degrees) * 1,
+        y: position.y + getSin(position.degrees) * 1,
+        degrees: position.degrees,
+        speed: 3,
+        movesTaken: 0,
+        ownerId: playerId,
+    };
+    bullets.push(bullet);
+
+    // Start Game Main Loop !! THIS DOESN'T BELONG HERE
+    startBulletsInterval();
 };
 
 const checkBulletTouchingPlayer = (bullet, player) => {
     // for now, just simple check of touching at this frame
     const xDiff = bullet.x - player.position.x;
     const yDiff = bullet.y - player.position.y;
-    const closeEnoughToTouch = 10;
+    const closeEnoughToTouch = 3; // <-- this is percentage of boardwidth / height
     const hypotenuse = Math.sqrt(xDiff * xDiff + yDiff * yDiff);
     return hypotenuse < closeEnoughToTouch;
 };
 
 const checkBulletsHitPlayers = () => {
     // console.log('checkBulletsHitPlayers()');
+    let hit = false;
     // for each bullet
     for (const bullet of bullets) {
         // check each player
@@ -89,100 +206,188 @@ const checkBulletsHitPlayers = () => {
                 checkBulletTouchingPlayer(bullet, player)
             ) {
                 console.log("\n!!!!!!!!!BULLET HIT!!!!!!!!!!\n");
+                hit = true;
+
                 // add to bullet owner's score
-                players[bullet.ownerId].score++;
+                if (players[bullet.ownerId]) {
+                    players[bullet.ownerId].score++;
+                }
+
                 // remove bullet
                 bullets.splice(bullets.indexOf(bullet), 1);
+
                 // remove player
-                delete players[playerId];
+                damagePlayer(playerId, 10);
+
+                // check game over
+                checkGameOver();
+                break;
             }
         }
+        if (gameOver) {
+            break;
+        }
     }
+    return hit;
 };
 
-const players = {
-    // sdafasdlkjlkj80: {
-    //     x: 100,
-    //     y: 100,
-    //     color: yellow,
-    //     degrees: 0,
-    //     hp: 10
-    // }
+const checkBulletTouchingObstacle = (bullet, obstacle) => {
+    return (
+        bullet.x >= obstacle.l &&
+        bullet.x <= obstacle.r &&
+        bullet.y >= obstacle.t &&
+        bullet.y <= obstacle.b
+    );
 };
-const addPlayer = (playerID) => {
-    console.log("addPlayer(" + playerID + ")");
-    const playerExists = players[playerID] !== undefined;
-    if (playerExists) {
-        return { error: `Player ${playerID} already connected.` };
+
+const checkBulletsHitObstacles = () => {
+    // console.log('checkBulletsHitObstacles()');
+    let hit = false;
+    // for each bullet
+    for (const bullet of bullets) {
+        // check each player
+        for (const obstacle of obstacles) {
+            // if contact, and
+            if (checkBulletTouchingObstacle(bullet, obstacle)) {
+                console.log("\n!!!!!!!!!BULLET HIT!!!!!!!!!!\n");
+                hit = true;
+
+                // remove bullet
+                bullets.splice(bullets.indexOf(bullet), 1);
+
+                break;
+            }
+        }
+        if (hit) {
+            break;
+        }
     }
-    const playerX = Object.keys(players).length * 30;
-    const newPlayer = {
-        name: "Player Name",
-        color: "yellow",
-        position: {
-            x: playerX,
-            y: 100,
-            degrees: 0,
-        },
-        hp: 10,
-        score: 0,
-    };
-
-    players[playerID] = newPlayer;
-    return { player: newPlayer };
-};
-const removePlayer = (playerID) => {
-    console.log(`removePlayer(${playerID})`);
-    delete players[playerID];
-};
-const updatePlayer = (player) => {
-    players[play];
-};
-
-const bullets = [];
-
-const addBullet = (playerId) => {
-    const position = players[playerId].position;
-    const bullet = {
-        x: position.x + getCos(position.degrees) * 10,
-        y: position.y + getSin(position.degrees) * 10,
-        degrees: position.degrees,
-        speed: 12,
-        movesTaken: 0,
-        ownerId: playerId,
-    };
-    bullets.push(bullet);
-    // Start Game Main Loop
-    startBroadcastInterval();
+    return hit;
 };
 
 // const rooms = [];
 
+// Log Out Socket IDs
+const getSockets = async () => {
+    const sockets = await io.fetchSockets();
+    // console.log("\nsockets... ");
+    for (const sock of sockets) {
+        // console.log(sock.id);
+    }
+    // console.log("\n");
+};
+
+//////////////////////////////////////////////////////////////////////
+// v SOCKET LISTENERS v
+////////////////////////
+
 io.on("connection", (socket) => {
-    console.log(`User Connected: ${socket.id}`);
-    startBroadcastInterval();
-    // addPlayer(socket.id);
-    const { error } = addPlayer(socket.id);
-    console.log("players.length:", Object.keys(players).length);
-    if (error) return callback(error);
+    console.log(`\n\rUser Connected: ${socket.id}`);
+
+    // io.emit("setObstacles", obstacles);
+    socket.emit("setObstacles", obstacles);
+
+    
+    const originalId = socket.id;
+// console.log("originalId:", originalId);
+
+    socket.on("connect_error", (err) => {
+        console.log(`\nconnect_error due to ${err.message}\n`);
+      });
+
+
+    
+    // const { error } = addPlayer(socket.id);
+    // if (error) return callback(error);
+    // if (error) console.log("error:", error);
+    // console.log('callback: ',callback);
+
+    // Test Connection to Client
+    // socket.emit("checkConnection", {message:"Hello from the server!",id:socket.id}, (ack) => {
+    //     console.log("\nMessage received by client!\n"+ack.message,"ID",ack.id);
+    //     console.log("IDs Match: ",ack.id === originalId)
+    //     console.log(ack.id,'vs',socket.id,'vs',originalId)
+    //     if(ack.id === originalId){
+    //         const { error } = addPlayer(socket.id);
+    //         if (error) {
+    //             console.log("error joining: ", error);
+    //             socket.emit("setJoined", false);
+    //         } else {
+    //             socket.emit("setJoined", true, (answer) => {
+    //                 console.log("\nANSWER:", answer, "\n");
+    //             });
+    //         }
+    //     }
+    // });
+
+    // setTimeout(() => {
+    //     io.to(originalId).emit("checkConnection", (answer) => {
+    //         console.log("checked connection with ", originalId, ":\n", answer,"\n");
+    //     });
+    // }, 1000);
 
     // broadcast to all players
-    console.log("updatePlayers");
-    io.emit("updatePlayers", players);
+    // if (!gameOver) {
+    // io.emit("updatePlayers", players);
+    // }
+
+    // getSockets();
+
+    // io.to(socketId).emit(/* ... */);
+
+    socket.on("join_game", () => {
+        console.log("\n\rjoin_game", socket.id);
+        // console.log("original id: ", originalId);
+        const { error } = addPlayer(socket.id);
+        if (error) {
+            console.log("error joining: ", error);
+            socket.emit("setJoined", false);
+        } else {
+            socket.emit("setJoined", true, (answer) => {
+                console.log("\nANSWER:", answer, "\n");
+            });
+        }
+        // broadcast to all players
+        // io.emit("updatePlayers", players);
+    });
+
+    socket.on("player_ready", (callback) => {
+        console.log("\n\rplayer_ready", socket.id);
+        // console.log("original id: ", originalId);
+        if (!players[socket.id]) {
+            addPlayer(socket.id);
+        }
+        readyPlayers.push(socket.id);
+        // if all players ready, start game
+        console.log("readyPlayers:[", readyPlayers, "]");
+        console.log("allPlayersReady", checkAllPlayersReady());
+        if (checkAllPlayersReady()) {
+            startGame();
+        }
+        callback(true);
+        socket.emit("updatePlayers", players);
+    });
 
     socket.on("update_player", (clientPlayer) => {
         players[socket.id] = { ...clientPlayer };
-        socket.broadcast.emit("updatePlayers", players);
+        // to all players except socket sender
+        // socket.broadcast.emit("updatePlayers", players);
+        socket.broadcast.emit("updatePlayer",socket.id, clientPlayer);
     });
 
     socket.on("fire_bullet", () => {
-        console.log("\nFire Bullet");
+        // console.log("\nFire Bullet");
         // Add Bullet
         addBullet(socket.id);
+        socket.broadcast.emit("playShoot");
     });
 
+    // socket.on("disconnect", async () => {
+
+    //   });
+
     socket.on("disconnect", (reason) => {
-        console.log("DISCONNECT");
+        console.log("\n\rDISCONNECT");
         console.log("reason: ", reason);
         removePlayer(socket.id);
         io.emit("updatePlayers", players);
@@ -250,6 +455,13 @@ io.on("connection", (socket) => {
     // });
 });
 
-server.listen(3011, () => {
-    console.log("Server is running on port 3011");
+app.get("/", (req, res) => {
+    res.send({ hello: "world" });
+});
+
+// server.listen(3011, () => {
+//     console.log("Server is running on port 3011");
+// });
+server.listen(3000, () => {
+    console.log("server running!  It Lives!");
 });
