@@ -33,7 +33,8 @@ import {
     removePlayer,
     addPlayer,
     damagePlayer,
-    postionPlayersAtStart,
+    setGameInSession,
+    positionPlayersAtStart,
     // clearPlayers,
 } from "./players.js";
 
@@ -80,6 +81,7 @@ const checkGameOver = () => {
         // for(const key in players){
         //     console.log(key);
         // }
+        setGameInSession(false);
     }
 };
 
@@ -97,6 +99,7 @@ const startGame = () => {
     // Start Game
     gameOver = false;
     io.emit("updatePlayers", players);
+    setGameInSession(true);
 };
 
 const checkAllPlayersReady = () => {
@@ -144,7 +147,7 @@ const bulletsLoop = () => {
                 bullet.y += getSin(bullet.degrees) * bullet.speed;
                 bullet.movesTaken++;
             }
-            checkBulletsHitObstacles();
+            // checkBulletsHitObstacles();
             if (checkBulletsHitPlayers()) {
                 hits++;
             }
@@ -265,6 +268,15 @@ const checkBulletsHitObstacles = () => {
     return hit;
 };
 
+////////////////////////
+// v SOCKET FUNCTIONS v
+////////////////////////
+const getSocketById = (id) => {
+    return io.sockets.sockets.get(id);
+};
+const disconnectUser = (id) => {
+    getSocketById(id).disconnect();
+};
 // const rooms = [];
 
 // Log Out Socket IDs
@@ -277,6 +289,16 @@ const getSockets = async () => {
     // console.log("\n");
 };
 
+// take stock of current players
+const listPlayers = () => {
+    console.log("");
+    console.log("players: ");
+    for (const id in players) {
+        console.log(id);
+    }
+    console.log("");
+};
+
 //////////////////////////////////////////////////////////////////////
 // v SOCKET LISTENERS v
 ////////////////////////
@@ -284,19 +306,32 @@ const getSockets = async () => {
 io.on("connection", (socket) => {
     console.log(`\n\rUser Connected: ${socket.id}`);
 
-    // io.emit("setObstacles", obstacles);
-    socket.emit("setObstacles", obstacles);
+    const handshake = socket.handshake;
+    // console.log('');
+    // console.log('--------------------------------------');
+    // console.log("handshake ", handshake);
+    // console.log('--------------------------------------');
+    // console.log('');
+    console.log(
+        "New connection from origin " +
+            handshake.headers.origin +
+            ". Referer" +
+            handshake.headers.referer
+    );
+    console.log("socket.handshake.address:", socket.handshake.address);
 
-    
+    // io.emit("setObstacles", obstacles);
+    // socket.emit("setObstacles", obstacles);
+
+    socket.emit("message", `connection noted for player ID ${socket.id}`);
+
     const originalId = socket.id;
-// console.log("originalId:", originalId);
+    // console.log("originalId:", originalId);
 
     socket.on("connect_error", (err) => {
         console.log(`\nconnect_error due to ${err.message}\n`);
-      });
+    });
 
-
-    
     // const { error } = addPlayer(socket.id);
     // if (error) return callback(error);
     // if (error) console.log("error:", error);
@@ -335,21 +370,22 @@ io.on("connection", (socket) => {
 
     // io.to(socketId).emit(/* ... */);
 
-    socket.on("join_game", () => {
-        console.log("\n\rjoin_game", socket.id);
-        // console.log("original id: ", originalId);
-        const { error } = addPlayer(socket.id);
-        if (error) {
-            console.log("error joining: ", error);
-            socket.emit("setJoined", false);
-        } else {
-            socket.emit("setJoined", true, (answer) => {
-                console.log("\nANSWER:", answer, "\n");
-            });
-        }
-        // broadcast to all players
-        // io.emit("updatePlayers", players);
-    });
+    // socket.on("join_game", () => {
+    console.log("\n\rjoin_game", socket.id);
+    // console.log("original id: ", originalId);
+    const { error } = addPlayer(socket.id);
+    if (error) {
+        console.log("error joining: ", error);
+        socket.emit("setJoined", false);
+    } else {
+        socket.emit("setJoined", true, (answer) => {
+            console.log("\nANSWER:", answer, "\n");
+        });
+    }
+    // broadcast to all players
+    io.emit("updatePlayers", players);
+    listPlayers();
+    // });
 
     socket.on("player_ready", (callback) => {
         console.log("\n\rplayer_ready", socket.id);
@@ -365,14 +401,15 @@ io.on("connection", (socket) => {
             startGame();
         }
         callback(true);
-        socket.emit("updatePlayers", players);
+        // socket.emit("updatePlayers", players);
+        io.emit("updatePlayers", players);
     });
 
     socket.on("update_player", (clientPlayer) => {
         players[socket.id] = { ...clientPlayer };
         // to all players except socket sender
         // socket.broadcast.emit("updatePlayers", players);
-        socket.broadcast.emit("updatePlayer",socket.id, clientPlayer);
+        socket.broadcast.emit("updatePlayer", socket.id, clientPlayer);
     });
 
     socket.on("fire_bullet", () => {
@@ -389,9 +426,11 @@ io.on("connection", (socket) => {
     socket.on("disconnect", (reason) => {
         console.log("\n\rDISCONNECT");
         console.log("reason: ", reason);
+        socket.emit("message", `disconnected from player ID ${socket.id}`);
         removePlayer(socket.id);
         io.emit("updatePlayers", players);
-        console.log("players.length:", Object.keys(players).length);
+        listPlayers();
+        // console.log("players.length:", Object.keys(players).length);
         // console.log("Users: ", getUsersInRoom(user?.room));
         // const user = removeUser(clientUser.name);
         // if (user) {
@@ -432,11 +471,16 @@ io.on("connection", (socket) => {
     //     });
     //     callback();
     // });
-    // socket.on("disconnect_client", (clientUser) => {
-    //     console.log("disconnect_client, id:",clientUser.id);
-    //     const user = removeUser(clientUser.name);
-    //     console.log("Users: ", getUsersInRoom(user?.room));
-    // });
+    socket.on("disconnect_client", (clientUser) => {
+        // console.log("disconnect_client, id:",clientUser.id);
+        console.log("disconnect_client", socket.id);
+        removePlayer(socket.id);
+        disconnectUser(socket.id);
+        io.emit("updatePlayers", players);
+        listPlayers();
+        // const user = removeUser(clientUser.name);
+        // console.log("Users: ", getUsersInRoom(user?.room));
+    });
 
     // socket.on("move_user", (clientUser) => {
     //     console.log("move_user", clientUser);

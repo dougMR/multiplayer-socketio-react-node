@@ -1,6 +1,9 @@
 import { getCos, getSin } from "./sinCos.js";
 
-
+let gameInSession = false;
+const setGameInSession = (value) => {
+    gameInSession = value;
+}
 
 const players = {
     // sdafasdlkjlkj80: {
@@ -11,9 +14,10 @@ const players = {
     //     hp: 10
     // }
 };
-const postionPlayersAtStart = () => {
+const positionPlayersAtStart = () => {
     const playerKeys = Object.keys(players);
     const numPlayers = playerKeys.length;
+    console.log("positionPlayersAtStart(),", numPlayers);
     const degStep = 360 / numPlayers;
     for (let pnum = 0; pnum < numPlayers; pnum++) {
         const player = players[playerKeys[pnum]];
@@ -49,10 +53,9 @@ const addPlayer = (playerID) => {
 
     players[playerID] = newPlayer;
     console.log("players.length:", Object.keys(players).length);
-    postionPlayersAtStart();
+    positionPlayersAtStart();
     return { player: newPlayer };
 };
-
 
 const damagePlayer = (playerId, damage) => {
     const player = players[playerId];
@@ -65,10 +68,17 @@ const damagePlayer = (playerId, damage) => {
     }
 };
 
-
 const removePlayer = (playerID) => {
     console.log(`removePlayer(${playerID})`);
-    delete players[playerID];
+    // console.log('socket',socket);
+    if (players[playerID]) {
+        delete players[playerID];
+    }
+    // socket.disconnect();
+    if(!gameInSession){
+        positionPlayersAtStart();
+    }
+    
 };
 
 // const clearPlayers = () => {
@@ -77,12 +87,12 @@ const removePlayer = (playerID) => {
 //     }
 // }
 
-
 export {
     players,
     removePlayer,
     addPlayer,
     damagePlayer,
-    postionPlayersAtStart,
+    positionPlayersAtStart,
     // clearPlayers,
+    setGameInSession
 };
