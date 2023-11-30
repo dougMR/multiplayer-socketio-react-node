@@ -1,0 +1,147 @@
+:root {
+    --size-unit: 1vmin;
+}
+
+.App {
+    text-align: center;
+}
+
+body {
+    padding: 0;
+    margin: 0;
+    background-color: lightgrey;
+}
+
+.instructions {
+    padding: 0.5rem;
+    font-family: sans-serif;
+    text-align: left;
+    background-color: #3a4d7e;
+    color:#ddd;
+}
+
+.light {
+    width: 10px;
+    height: 10px;
+    border-radius: 5px;
+    border: 1px solid white;
+    background-color: red;
+}
+.light.on {
+    background-color: lime;
+}
+
+#board {
+    position: relative;
+    display: inline-block;
+    /* border: 2px solid #c2c2c2; */
+    height: 80vmin;
+    width: 80vmin;
+    max-width: 70vh;
+    max-height: 70vh;
+    background-color: white;
+    text-align: center;
+}
+#board-image {
+    position: absolute;
+    display: block;
+    left: 50%;
+    top: 50%;
+    transform: translateX(-50%) translateY(-50%);
+    height: 90%;
+}
+ul.states {
+    list-style-type: none;
+    padding: 0.5em;
+    margin: 0;
+}
+ul.states li {
+    /* margin: 0; */
+}
+
+.game-text {
+    font-family: monospace;
+    margin: 0 0.5rem;
+}
+.game-text h4,
+.game-text .player-data {
+    font-family: sans-serif;
+}
+.game-status {
+    position: relative;
+    font-size: 1.2rem;
+    color: rgb(30, 57, 153);
+    border: 2px solid rgb(58, 77, 126);
+    padding: 1rem;
+    margin-top: 0;
+}
+
+#player-color-dot{
+    position:absolute;
+    top:0;
+    left:0;
+    width: 2vmin;
+    height: 2vmin;
+    background-color: blue;
+    border-bottom-right-radius:2vmin;
+}
+
+.player-avatar {
+    position: absolute;
+    --bg-color: yellow;
+    z-index: 100;
+}
+.player-avatar .player-avatar-inner,
+.player-avatar .treads  {
+    position: absolute;
+    /* width: 20px;
+  height: 20px; */
+    width: calc(3.8 * var(--size-unit));
+    height: calc(3.8 * var(--size-unit));
+    /* margin-left:-10px;
+  margin-top:-10px; */
+    margin-left: calc(-1.7 * var(--size-unit));
+    margin-top: calc(-1.9 * var(--size-unit));
+    rotate: 45deg;
+    border-radius: 25px;
+    border-top-right-radius: 0;
+    background-color: var(--bg-color);
+    box-sizing: border-box;
+}
+.player-avatar .treads {
+    /* margin-top: calc(-1.3 * var(--size-unit)); */
+    margin-left: calc(-2 * var(--size-unit));
+    width: calc(2.7 * var(--size-unit));
+    box-sizing: content-box;
+
+    border: var(--size-unit) solid black;
+    border-top: none;
+    border-bottom: none;
+    border-radius: 0;
+    rotate: 90deg;
+    background-color: transparent;
+    border-color: darkgrey;
+}
+.bullet {
+    position: absolute;
+}
+
+.bullet .bullet-inner {
+    position: absolute;
+    /* width: 10px; */
+    /* height: 6px; */
+    width: calc(1.5 * var(--size-unit));
+    height: calc(0.8 * var(--size-unit));
+    /* margin-left:-5px;
+  margin-top:-3px; */
+    margin-left: calc(-0.75 * var(--size-unit));
+    margin-top: calc(-0.4 * var(--size-unit));
+    /* border-radius: 0 3px 3px 0; */
+    border-radius: 0 calc(0.4 * var(--size-unit)) calc(0.4 * var(--size-unit)) 0;
+    box-shadow: calc(-0.4 * var(--size-unit)) 0 3px 2px rgb(255, 242, 0);
+    background-color: rgb(0, 255, 13);
+}
+.obstacle {
+    position: absolute;
+    background-color: orange;
+}
